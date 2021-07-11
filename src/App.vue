@@ -109,12 +109,88 @@
           Добавить
         </button>
       </section>
+      <section>
+        <hr class="w-full border-t border-gray-600 my-4" />
+        <div>
+          <label for="filter" class="block text-lx font-medium text-gray-700">Фильтр</label>
+          <input
+            v-model="filter"
+            id="filter"
+            type="text"
+            class="
+              block
+              w-full
+              pr-10
+              mt-2
+              border-gray-300
+              text-gray-900
+              focus:outline-none focus:ring-gray-500 focus:border-gray-500
+              sm:text-sm
+              rounded-md
+            "
+            placeholder="Введите название тикера"
+          />
+        </div>
+        <button
+          v-if="page > 1"
+          @click="page = page - 1"
+          type="button"
+          class="
+            mr-2
+            my-4
+            inline-flex
+            items-center
+            py-2
+            px-4
+            border border-transparent
+            shadow-sm
+            text-sm
+            leading-4
+            font-medium
+            rounded-full
+            text-white
+            bg-gray-600
+            hover:bg-gray-700
+            transition-colors
+            duration-300
+            focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500
+          "
+        >
+          Назад
+        </button>
+        <button
+          v-if="hasNextPage"
+          type="button"
+          @click="page = page + 1"
+          class="
+            my-4
+            inline-flex
+            items-center
+            py-2
+            px-4
+            border border-transparent
+            shadow-sm
+            text-sm
+            leading-4
+            font-medium
+            rounded-full
+            text-white
+            bg-gray-600
+            hover:bg-gray-700
+            transition-colors
+            duration-300
+            focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500
+          "
+        >
+          Вперед
+        </button>
+      </section>
 
       <template v-if="tickers.length">
         <hr class="w-full border-t border-gray-600 my-4" />
         <dl class="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
           <div
-            v-for="ticker in tickers"
+            v-for="ticker in filteredTickers()"
             :key="ticker.name"
             :class="{ 'border-4': ticker === selected }"
             class="bg-white overflow-hidden shadow rounded-lg border-purple-800 border-solid cursor-pointer"
@@ -212,10 +288,22 @@ export default {
       suggestTickers: [],
       tickerExist: false,
       selected: null,
-      apiKey: '5ce0b83a3cd367f4805d7cde091fadfd4ef6a58b6d3b850f90ecf9cce52bc63b'
+      apiKey: '5ce0b83a3cd367f4805d7cde091fadfd4ef6a58b6d3b850f90ecf9cce52bc63b',
+      page: 1,
+      hasNextPage: true,
+      filter: ''
     }
   },
   async created() {
+    const windowData = Object.fromEntries(new URL(window.location).searchParams.entries())
+
+    if (windowData.filter) {
+      this.filter = windowData.filter
+    }
+    if (windowData.page) {
+      this.page = windowData.page
+    }
+
     this.tickers = JSON.parse(localStorage.getItem('cryptonomicon-tickers')) || []
     this.tickers.forEach((ticker) => this.subcribeToUpdates(ticker.name))
 
@@ -228,6 +316,15 @@ export default {
   },
 
   methods: {
+    filteredTickers() {
+      const start = (this.page - 1) * 6
+      const end = this.page * 6
+      const filteredTickers = this.tickers.filter((ticker) =>
+        ticker.name.toLowerCase().includes(this.filter.toLowerCase())
+      )
+      this.hasNextPage = end < filteredTickers.length
+      return filteredTickers.slice(start, end)
+    },
     subcribeToUpdates(tickerName) {
       setInterval(async () => {
         const f = await fetch(
@@ -243,6 +340,7 @@ export default {
     },
     addTicker(ticker) {
       if (!ticker) return
+      this.filter = ''
       if (this.tickers.find((e) => e.name == ticker.toUpperCase())) {
         this.ticker = ticker
         this.tickerExist = true
@@ -276,12 +374,27 @@ export default {
     findSuggestTickers() {
       return this.suggestTickers
         .filter((suggest) => suggest.fullname.toLowerCase().includes(this.ticker.toLowerCase()))
-        .splice(0, 4)
+        .slice(0, 4)
     }
   },
   watch: {
     ticker() {
       if (this.tickerExist) this.tickerExist = false
+    },
+    filter() {
+      this.page = 1
+      window.history.pushState(
+        null,
+        document.title,
+        `${window.location.pathname}?filter=${this.filter}&page=${this.page}`
+      )
+    },
+    page() {
+      window.history.pushState(
+        null,
+        document.title,
+        `${window.location.pathname}?filter=${this.filter}&page=${this.page}`
+      )
     }
   }
 }
