@@ -99,7 +99,9 @@
           >
             <div @click="selectTicker(ticker)" class="px-4 py-5 sm:p-6 text-center">
               <dt class="text-sm font-medium text-gray-500 truncate">{{ ticker.name }} - USD</dt>
-              <dd class="mt-1 text-3xl font-semibold text-gray-900">{{ ticker.price }}</dd>
+              <dd class="mt-1 text-3xl font-semibold text-gray-900">
+                {{ ticker.price }}
+              </dd>
             </div>
             <div class="w-full border-t border-gray-200"></div>
             <button
@@ -235,4 +237,3 @@ export default {
   }
 }
 </script>
-<style src="@/app.css"></style>
