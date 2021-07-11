@@ -1,6 +1,25 @@
 <template>
   <div class="container mx-auto flex flex-col items-center bg-gray-100 p-4">
-    <div class="container">
+    <div
+      v-if="loading"
+      class="fixed w-100 h-100 opacity-80 bg-purple-800 inset-0 z-50 flex items-center justify-center"
+    >
+      <svg
+        class="animate-spin -ml-1 mr-3 h-12 w-12 text-white"
+        xmlns="http://www.w3.org/2000/svg"
+        fill="none"
+        viewBox="0 0 24 24"
+      >
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path
+          class="opacity-75"
+          fill="currentColor"
+          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+        ></path>
+      </svg>
+    </div>
+
+    <div v-if="!loading" class="container">
       <section>
         <div class="flex">
           <div class="max-w-xs">
@@ -21,15 +40,18 @@
                   rounded-md
                 "
                 v-model.trim="ticker"
-                @keydown.enter="addTicker"
+                @keydown.enter="addTicker(ticker)"
                 placeholder="Например DOGE"
               />
             </div>
-            <div v-if="suggestTickers.length" class="flex bg-white shadow-md p-1 rounded-md shadow-md flex-wrap">
+            <div
+              v-if="ticker && findSuggestTickers.length"
+              class="flex bg-white shadow-md p-1 rounded-md shadow-md flex-wrap"
+            >
               <span
-                v-for="suggest in suggestTickers"
-                :key="suggest"
-                @click="this.ticker = suggest"
+                v-for="suggest in findSuggestTickers"
+                :key="suggest.name"
+                @click="addTicker(suggest.name)"
                 class="
                   inline-flex
                   items-center
@@ -43,14 +65,14 @@
                   cursor-pointer
                 "
               >
-                {{ suggest }}
+                {{ suggest.name }}
               </span>
             </div>
             <div v-if="tickerExist" class="text-sm text-red-600">Такой тикер уже добавлен</div>
           </div>
         </div>
         <button
-          @click.prevent="addTicker"
+          @click.prevent="addTicker(ticker)"
           type="button"
           class="
             my-4
@@ -183,35 +205,55 @@ export default {
   name: 'App',
   data() {
     return {
-      ticker: null,
+      loading: true,
+      ticker: '',
       tickers: [],
       graph: [],
+      suggestTickers: [],
       tickerExist: false,
       selected: null,
       apiKey: '5ce0b83a3cd367f4805d7cde091fadfd4ef6a58b6d3b850f90ecf9cce52bc63b'
     }
   },
+  async created() {
+    this.tickers = JSON.parse(localStorage.getItem('cryptonomicon-tickers')) || []
+    this.tickers.forEach((ticker) => this.subcribeToUpdates(ticker.name))
+
+    let f = await fetch('https://min-api.cryptocompare.com/data/all/coinlist?summary=true')
+    const data = await f.json()
+    this.suggestTickers = Object.entries(data.Data).map(([, value]) => {
+      return { name: value.Symbol, fullname: value.FullName }
+    })
+    this.loading = false
+  },
+
   methods: {
-    addTicker() {
-      if (!this.ticker) return
-      if (this.tickers.find((e) => e.name == this.ticker.toUpperCase())) {
+    subcribeToUpdates(tickerName) {
+      setInterval(async () => {
+        const f = await fetch(
+          `https://min-api.cryptocompare.com/data/price?fsym=${tickerName}&tsyms=USD&api_key=${this.apiKey}`
+        )
+        const data = await f.json()
+        this.tickers.find((t) => t.name === tickerName).price =
+          data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2)
+        if (this.selected?.name == tickerName) {
+          this.graph.push(data.USD)
+        }
+      }, 3000)
+    },
+    addTicker(ticker) {
+      if (!ticker) return
+      if (this.tickers.find((e) => e.name == ticker.toUpperCase())) {
+        this.ticker = ticker
         this.tickerExist = true
       } else {
-        const currentTicker = { name: this.ticker.toUpperCase(), price: '-' }
+        const currentTicker = { name: ticker.toUpperCase(), price: '-' }
         this.tickerExist = false
         this.tickers.unshift(currentTicker)
-        setInterval(async () => {
-          const f = await fetch(
-            `https://min-api.cryptocompare.com/data/price?fsym=${currentTicker.name}&tsyms=USD&api_key=${this.apiKey}`
-          )
-          const data = await f.json()
-          this.tickers.find((t) => t.name === currentTicker.name).price =
-            data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2)
-          if (this.selected?.name == currentTicker.name) {
-            this.graph.push(data.USD)
-          }
-        }, 3000)
-        this.ticker = null
+
+        localStorage.setItem('cryptonomicon-tickers', JSON.stringify(this.tickers))
+        this.subcribeToUpdates(currentTicker.name)
+        this.ticker = ''
       }
     },
     selectTicker(ticker) {
@@ -231,8 +273,15 @@ export default {
     }
   },
   computed: {
-    suggestTickers() {
-      return ['BTC', 'BCH', 'CHD', 'DOGE'].filter((suggest) => !this.tickers.find((e) => e.name === suggest))
+    findSuggestTickers() {
+      return this.suggestTickers
+        .filter((suggest) => suggest.fullname.toLowerCase().includes(this.ticker.toLowerCase()))
+        .splice(0, 4)
+    }
+  },
+  watch: {
+    ticker() {
+      if (this.tickerExist) this.tickerExist = false
     }
   }
 }
