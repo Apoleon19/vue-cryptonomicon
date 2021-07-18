@@ -45,11 +45,11 @@
               />
             </div>
             <div
-              v-if="ticker && findSuggestTickers.length"
+              v-if="ticker && suggestedTickers.length"
               class="flex bg-white shadow-md p-1 rounded-md shadow-md flex-wrap"
             >
               <span
-                v-for="suggest in findSuggestTickers"
+                v-for="suggest in suggestedTickers"
                 :key="suggest.name"
                 @click="addTicker(suggest.name)"
                 class="
@@ -161,7 +161,7 @@
         <button
           v-if="hasNextPage"
           type="button"
-          @click="page = page + 1"
+          @click="page += 1"
           class="
             my-4
             inline-flex
@@ -190,12 +190,12 @@
         <hr class="w-full border-t border-gray-600 my-4" />
         <dl class="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
           <div
-            v-for="ticker in filteredTickers()"
+            v-for="ticker in tickersPage"
             :key="ticker.name"
-            :class="{ 'border-4': ticker === selected }"
+            :class="{ 'border-4': ticker === selectedTicker }"
             class="bg-white overflow-hidden shadow rounded-lg border-purple-800 border-solid cursor-pointer"
           >
-            <div @click="selectTicker(ticker)" class="px-4 py-5 sm:p-6 text-center">
+            <div @click="selectedTicker = ticker" class="px-4 py-5 sm:p-6 text-center">
               <dt class="text-sm font-medium text-gray-500 truncate">{{ ticker.name }} - USD</dt>
               <dd class="mt-1 text-3xl font-semibold text-gray-900">
                 {{ ticker.price }}
@@ -238,18 +238,18 @@
         </dl>
       </template>
 
-      <section v-if="selected" class="relative">
+      <section v-if="selectedTicker" class="relative">
         <hr class="w-full border-t border-gray-600 my-4" />
-        <h3 class="text-lg leading-6 font-medium text-gray-900 my-8">{{ selected.name }} - USD</h3>
+        <h3 class="text-lg leading-6 font-medium text-gray-900 my-8">{{ selectedTicker.name }} - USD</h3>
         <div class="flex items-end border-gray-600 border-b border-l h-64">
           <div
-            v-for="(bar, idx) in normalizeGraph()"
+            v-for="(bar, idx) in normalizedGraph"
             :key="idx"
             :style="{ height: `${bar}%` }"
             class="bg-purple-800 border w-10"
           ></div>
         </div>
-        <button @click="selected = null" type="button" class="absolute top-0 right-0">
+        <button @click="selectedTicker = null" type="button" class="absolute top-0 right-0">
           <svg
             xmlns="http://www.w3.org/2000/svg"
             xmlns:xlink="http://www.w3.org/1999/xlink"
@@ -283,26 +283,24 @@ export default {
     return {
       loading: true,
       ticker: '',
+      filter: '',
+
       tickers: [],
-      graph: [],
+      selectedTicker: null,
       suggestTickers: [],
       tickerExist: false,
-      selected: null,
-      apiKey: '5ce0b83a3cd367f4805d7cde091fadfd4ef6a58b6d3b850f90ecf9cce52bc63b',
+
+      graph: [],
+
       page: 1,
-      hasNextPage: true,
-      filter: ''
+
+      apiKey: '5ce0b83a3cd367f4805d7cde091fadfd4ef6a58b6d3b850f90ecf9cce52bc63b'
     }
   },
   async created() {
     const windowData = Object.fromEntries(new URL(window.location).searchParams.entries())
-
-    if (windowData.filter) {
-      this.filter = windowData.filter
-    }
-    if (windowData.page) {
-      this.page = windowData.page
-    }
+    if (windowData.filter) this.filter = windowData.filter
+    if (windowData.page) this.page = parseInt(windowData.page)
 
     this.tickers = JSON.parse(localStorage.getItem('cryptonomicon-tickers')) || []
     this.tickers.forEach((ticker) => this.subcribeToUpdates(ticker.name))
@@ -316,15 +314,6 @@ export default {
   },
 
   methods: {
-    filteredTickers() {
-      const start = (this.page - 1) * 6
-      const end = this.page * 6
-      const filteredTickers = this.tickers.filter((ticker) =>
-        ticker.name.toLowerCase().includes(this.filter.toLowerCase())
-      )
-      this.hasNextPage = end < filteredTickers.length
-      return filteredTickers.slice(start, end)
-    },
     subcribeToUpdates(tickerName) {
       setInterval(async () => {
         const f = await fetch(
@@ -333,7 +322,7 @@ export default {
         const data = await f.json()
         this.tickers.find((t) => t.name === tickerName).price =
           data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2)
-        if (this.selected?.name == tickerName) {
+        if (this.selectedTicker?.name == tickerName) {
           this.graph.push(data.USD)
         }
       }, 3000)
@@ -347,53 +336,69 @@ export default {
       } else {
         const currentTicker = { name: ticker.toUpperCase(), price: '-' }
         this.tickerExist = false
-        this.tickers.unshift(currentTicker)
+        this.tickers = [currentTicker, ...this.tickers]
 
-        localStorage.setItem('cryptonomicon-tickers', JSON.stringify(this.tickers))
         this.subcribeToUpdates(currentTicker.name)
         this.ticker = ''
       }
     },
-    selectTicker(ticker) {
-      this.selected = ticker
-      this.graph = []
-    },
     removeTicker(ticker) {
       this.tickers = this.tickers.filter((e) => e != ticker)
-      if (ticker == this.selected) {
-        this.selected = null
-      }
-    },
-    normalizeGraph() {
-      const maxValue = Math.max(...this.graph)
-      const minValue = Math.min(...this.graph)
-      return this.graph.map((price) => 5 + ((price - minValue) * 95) / (maxValue - minValue))
+      if (ticker == this.selectedTicker) this.selectedTicker = null
     }
   },
   computed: {
-    findSuggestTickers() {
+    filteredTickers() {
+      return this.tickers.filter((ticker) => ticker.name.toLowerCase().includes(this.filter.toLowerCase()))
+    },
+    tickersPage() {
+      return this.filteredTickers.slice(this.startIndex, this.endIndex)
+    },
+    startIndex() {
+      return (this.page - 1) * 6
+    },
+    endIndex() {
+      return this.page * 6
+    },
+    hasNextPage() {
+      return this.filteredTickers.length > this.endIndex
+    },
+    suggestedTickers() {
       return this.suggestTickers
         .filter((suggest) => suggest.fullname.toLowerCase().includes(this.ticker.toLowerCase()))
         .slice(0, 4)
+    },
+    normalizedGraph() {
+      const maxValue = Math.max(...this.graph)
+      const minValue = Math.min(...this.graph)
+      if (maxValue === minValue) return this.graph.map(() => 50)
+      return this.graph.map((price) => 5 + ((price - minValue) * 95) / (maxValue - minValue))
+    },
+    pageStateOptions() {
+      return {
+        page: this.page,
+        filter: this.filter
+      }
     }
   },
   watch: {
     ticker() {
       if (this.tickerExist) this.tickerExist = false
     },
-    filter() {
-      this.page = 1
-      window.history.pushState(
-        null,
-        document.title,
-        `${window.location.pathname}?filter=${this.filter}&page=${this.page}`
-      )
+    tickersPage() {
+      if (this.tickersPage.length === 0 && this.filteredTickers.length) this.page -= 1
     },
-    page() {
+    selectedTicker() {
+      this.graph = []
+    },
+    tickers() {
+      localStorage.setItem('cryptonomicon-tickers', JSON.stringify(this.tickers))
+    },
+    pageStateOptions() {
       window.history.pushState(
         null,
         document.title,
-        `${window.location.pathname}?filter=${this.filter}&page=${this.page}`
+        `${window.location.pathname}?filter=${this.pageStateOptions.filter}&page=${this.pageStateOptions.page}`
       )
     }
   }
