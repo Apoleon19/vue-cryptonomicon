@@ -44,10 +44,7 @@
                 placeholder="Например DOGE"
               />
             </div>
-            <div
-              v-if="ticker && suggestedTickers.length"
-              class="flex bg-white shadow-md p-1 rounded-md shadow-md flex-wrap"
-            >
+            <div v-if="ticker && suggestedTickers.length" class="flex bg-white shadow-md p-1 rounded-md flex-wrap">
               <span
                 v-for="suggest in suggestedTickers"
                 :key="suggest.name"
@@ -198,7 +195,7 @@
             <div @click="selectedTicker = ticker" class="px-4 py-5 sm:p-6 text-center">
               <dt class="text-sm font-medium text-gray-500 truncate">{{ ticker.name }} - USD</dt>
               <dd class="mt-1 text-3xl font-semibold text-gray-900">
-                {{ ticker.price }}
+                {{ formatPrice(ticker.price) }}
               </dd>
             </div>
             <div class="w-full border-t border-gray-200"></div>
@@ -277,6 +274,8 @@
   </div>
 </template>
 <script>
+import { loadSuggestTickers, subscribeToTicker, unsubscribeFromTicker } from '@/api.js'
+
 export default {
   name: 'App',
   data() {
@@ -293,8 +292,7 @@ export default {
       graph: [],
 
       page: 1,
-
-      apiKey: '5ce0b83a3cd367f4805d7cde091fadfd4ef6a58b6d3b850f90ecf9cce52bc63b'
+      pollingTickers: null
     }
   },
   async created() {
@@ -303,29 +301,31 @@ export default {
     if (windowData.page) this.page = parseInt(windowData.page)
 
     this.tickers = JSON.parse(localStorage.getItem('cryptonomicon-tickers')) || []
-    this.tickers.forEach((ticker) => this.subcribeToUpdates(ticker.name))
-
-    let f = await fetch('https://min-api.cryptocompare.com/data/all/coinlist?summary=true')
-    const data = await f.json()
-    this.suggestTickers = Object.entries(data.Data).map(([, value]) => {
-      return { name: value.Symbol, fullname: value.FullName }
+    this.tickers.forEach((ticker) => {
+      subscribeToTicker(ticker.name, this.updateTicker)
     })
+    this.pollingTickers = setInterval(this.updateTickers, 3000)
+
+    await this.updateSuggestTickers()
     this.loading = false
   },
 
   methods: {
-    subcribeToUpdates(tickerName) {
-      setInterval(async () => {
-        const f = await fetch(
-          `https://min-api.cryptocompare.com/data/price?fsym=${tickerName}&tsyms=USD&api_key=${this.apiKey}`
-        )
-        const data = await f.json()
-        this.tickers.find((t) => t.name === tickerName).price =
-          data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2)
-        if (this.selectedTicker?.name == tickerName) {
-          this.graph.push(data.USD)
-        }
-      }, 3000)
+    async updateSuggestTickers() {
+      const suggestData = await loadSuggestTickers()
+      this.suggestTickers = Object.entries(suggestData.Data).map(([, value]) => {
+        return { name: value.Symbol, fullname: value.FullName }
+      })
+    },
+    formatPrice(price) {
+      if (!price) return '-'
+      return price > 1 ? price.toFixed(2) : price.toPrecision(2)
+    },
+    updateTicker(tickerName, price) {
+      const searchedTicker = this.tickers.find((ticker) => ticker.name == tickerName)
+      if (searchedTicker) {
+        searchedTicker.price = price
+      }
     },
     addTicker(ticker) {
       if (!ticker) return
@@ -334,16 +334,16 @@ export default {
         this.ticker = ticker
         this.tickerExist = true
       } else {
-        const currentTicker = { name: ticker.toUpperCase(), price: '-' }
+        const currentTicker = { name: ticker.toUpperCase(), price: 0 }
         this.tickerExist = false
         this.tickers = [currentTicker, ...this.tickers]
-
-        this.subcribeToUpdates(currentTicker.name)
+        subscribeToTicker(currentTicker.name, this.updateTicker)
         this.ticker = ''
       }
     },
     removeTicker(ticker) {
       this.tickers = this.tickers.filter((e) => e != ticker)
+      unsubscribeFromTicker(ticker.name, this.updateTicker)
       if (ticker == this.selectedTicker) this.selectedTicker = null
     }
   },
@@ -365,7 +365,9 @@ export default {
     },
     suggestedTickers() {
       return this.suggestTickers
-        .filter((suggest) => suggest.fullname.toLowerCase().includes(this.ticker.toLowerCase()))
+        .filter((suggest) => {
+          return suggest.fullname.toLowerCase().includes(this.ticker.toLowerCase())
+        })
         .slice(0, 4)
     },
     normalizedGraph() {
@@ -401,6 +403,9 @@ export default {
         `${window.location.pathname}?filter=${this.pageStateOptions.filter}&page=${this.pageStateOptions.page}`
       )
     }
+  },
+  beforeUnmount() {
+    clearInterval(this.pollingTickers)
   }
 }
 </script>
