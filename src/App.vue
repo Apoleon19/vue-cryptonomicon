@@ -189,7 +189,7 @@
           <div
             v-for="ticker in tickersPage"
             :key="ticker.name"
-            :class="{ 'border-4': ticker === selectedTicker }"
+            :class="{ 'border-4': ticker === selectedTicker, 'bg-red-400': ticker.error }"
             class="bg-white overflow-hidden shadow rounded-lg border-purple-800 border-solid cursor-pointer"
           >
             <div @click="selectedTicker = ticker" class="px-4 py-5 sm:p-6 text-center">
@@ -313,19 +313,19 @@ export default {
   methods: {
     async updateSuggestTickers() {
       const suggestData = await loadSuggestTickers()
-      this.suggestTickers = Object.entries(suggestData.Data).map(([, value]) => {
-        return { name: value.Symbol, fullname: value.FullName }
-      })
+      this.suggestTickers = suggestData
     },
     formatPrice(price) {
       if (!price) return '-'
       return price > 1 ? price.toFixed(2) : price.toPrecision(2)
     },
-    updateTicker(tickerName, price) {
+    updateTicker(tickerName, price, hasError) {
       const searchedTicker = this.tickers.find((ticker) => ticker.name == tickerName)
       if (searchedTicker) {
         searchedTicker.price = price
+        if (hasError) searchedTicker.error = hasError
       }
+      if (searchedTicker == this.selectedTicker) this.graph.push(price)
     },
     addTicker(ticker) {
       if (!ticker) return
