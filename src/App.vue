@@ -189,10 +189,14 @@
           <div
             v-for="ticker in tickersPage"
             :key="ticker.name"
-            :class="{ 'border-4': ticker === selectedTicker, 'bg-red-400': ticker.error }"
+            :class="{ 'border-4': ticker === selectedTicker }"
             class="bg-white overflow-hidden shadow rounded-lg border-purple-800 border-solid cursor-pointer"
           >
-            <div @click="selectedTicker = ticker" class="px-4 py-5 sm:p-6 text-center">
+            <div
+              @click="selectedTicker = ticker"
+              class="px-4 py-5 sm:p-6 text-center"
+              :class="{ 'bg-red-400': ticker.error }"
+            >
               <dt class="text-sm font-medium text-gray-500 truncate">{{ ticker.name }} - USD</dt>
               <dd class="mt-1 text-3xl font-semibold text-gray-900">
                 {{ formatPrice(ticker.price) }}
@@ -238,13 +242,13 @@
       <section v-if="selectedTicker" class="relative">
         <hr class="w-full border-t border-gray-600 my-4" />
         <h3 class="text-lg leading-6 font-medium text-gray-900 my-8">{{ selectedTicker.name }} - USD</h3>
-        <div class="flex items-end border-gray-600 border-b border-l h-64">
+        <div class="flex items-end border-gray-600 border-b border-l h-64" ref="graph">
           <div
             v-for="(bar, idx) in normalizedGraph"
             :key="idx"
-            :style="{ height: `${bar}%` }"
-            class="bg-purple-800 border w-10"
-          ></div>
+            :style="{ height: `${bar}%`, width: `${graphElementWidth}px` }"
+            class="bg-purple-800 border"
+          />
         </div>
         <button @click="selectedTicker = null" type="button" class="absolute top-0 right-0">
           <svg
@@ -290,9 +294,15 @@ export default {
       tickerExist: false,
 
       graph: [],
+      maxGraphElements: 1,
 
-      page: 1,
-      pollingTickers: null
+      page: 1
+    }
+  },
+  setup() {
+    return {
+      graphElementWidth: 40,
+      maxTickersPerPage: 6
     }
   },
   async created() {
@@ -304,10 +314,12 @@ export default {
     this.tickers.forEach((ticker) => {
       subscribeToTicker(ticker.name, this.updateTicker)
     })
-    this.pollingTickers = setInterval(this.updateTickers, 3000)
 
     await this.updateSuggestTickers()
     this.loading = false
+  },
+  mounted() {
+    window.addEventListener('resize', this.calculateMaxGraphElements)
   },
 
   methods: {
@@ -320,12 +332,25 @@ export default {
       return price > 1 ? price.toFixed(2) : price.toPrecision(2)
     },
     updateTicker(tickerName, price, hasError) {
-      const searchedTicker = this.tickers.find((ticker) => ticker.name == tickerName)
-      if (searchedTicker) {
-        searchedTicker.price = price
-        if (hasError) searchedTicker.error = hasError
-      }
-      if (searchedTicker == this.selectedTicker) this.graph.push(price)
+      this.tickers
+        .filter((t) => t.name == tickerName)
+        .forEach((t) => {
+          if (t === this.selectedTicker) {
+            this.graph.push(price)
+            this.calculateGraphElementsToDisplay()
+          }
+          t.price = price
+          t.error = Boolean(hasError)
+        })
+    },
+    calculateMaxGraphElements() {
+      if (!this.$refs.graph) return
+      this.maxGraphElements = Math.round(this.$refs.graph.clientWidth / this.graphElementWidth)
+      this.calculateGraphElementsToDisplay()
+    },
+    calculateGraphElementsToDisplay() {
+      if (this.graph.length < this.maxGraphElements) return
+      this.graph = this.graph.splice(this.graph.length - this.maxGraphElements)
     },
     addTicker(ticker) {
       if (!ticker) return
@@ -355,10 +380,10 @@ export default {
       return this.filteredTickers.slice(this.startIndex, this.endIndex)
     },
     startIndex() {
-      return (this.page - 1) * 6
+      return (this.page - 1) * this.maxTickersPerPage
     },
     endIndex() {
-      return this.page * 6
+      return this.page * this.maxTickersPerPage
     },
     hasNextPage() {
       return this.filteredTickers.length > this.endIndex
@@ -392,6 +417,7 @@ export default {
     },
     selectedTicker() {
       this.graph = []
+      this.$nextTick().then(this.calculateMaxGraphElements)
     },
     tickers() {
       localStorage.setItem('cryptonomicon-tickers', JSON.stringify(this.tickers))
@@ -405,7 +431,7 @@ export default {
     }
   },
   beforeUnmount() {
-    clearInterval(this.pollingTickers)
+    window.removeEventListener('resize', this.calculateMaxGraphElements)
   }
 }
 </script>

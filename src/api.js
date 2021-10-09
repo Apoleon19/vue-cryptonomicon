@@ -8,7 +8,9 @@ const messages = { invalidSub: 'INVALID_SUB' }
 const tickersHandlers = new Map()
 const socket = new WebSocket(`wss://streamer.cryptocompare.com/v2?api_key=${API_KEY}`)
 
-socket.addEventListener('message', (e) => {
+socket.addEventListener('message', handleFetchMessage)
+
+function handleFetchMessage(e) {
   const {
     TYPE: type,
     MESSAGE: message,
@@ -28,7 +30,7 @@ socket.addEventListener('message', (e) => {
   }
   if (type !== AGGREGATE_INDEX || !newPrice) return
   updateCurrencyHandlers(currency, newPrice)
-})
+}
 
 function updateTickerThroughBTC(ticker) {
   const subscribes = tickersHandlers.get(ticker) || []
