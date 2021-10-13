@@ -89,20 +89,14 @@
             :ticker="ticker"
             :isSelected="ticker == selectedTicker"
             @select-ticker="selectedTicker = $event"
-            @remove-ticker="openRemoveModal"
+            @remove-ticker="removeTicker"
           />
         </dl>
       </template>
       <ticker-graph :graph="graph" :ticker="selectedTicker" @close-graph="selectedTicker = null" />
     </div>
   </div>
-  <crypto-modal :is-open="isOpenModal" @close="isOpenModal = false" @confirm="removeTicker">
-    <template #title>Удаление тикера</template>
-    <template #body
-      >Вы уверены, что хотите удалить тикер <b>{{ tickerToRemove.name }}</b
-      >?</template
-    >
-  </crypto-modal>
+  <crypto-modal ref="confirmModal" />
 </template>
 <script>
 import { subscribeToTicker, unsubscribeFromTicker } from '@/api.js'
@@ -126,10 +120,7 @@ export default {
       graph: [],
       maxGraphElements: 1,
 
-      page: 1,
-
-      isOpenModal: false,
-      tickerToRemove: null
+      page: 1
     }
   },
   setup() {
@@ -179,15 +170,17 @@ export default {
       if (this.graph.length < this.maxGraphElements) return
       this.graph = this.graph.splice(this.graph.length - this.maxGraphElements)
     },
-    removeTicker() {
-      this.tickers = this.tickers.filter((e) => e != this.tickerToRemove)
-      unsubscribeFromTicker(this.tickerToRemove.name, this.updateTicker)
-      if (this.tickerToRemove == this.selectedTicker) this.selectedTicker = null
-      this.isOpenModal = false
-    },
-    openRemoveModal(ticker) {
-      this.tickerToRemove = ticker
-      this.isOpenModal = true
+    async removeTicker(ticker) {
+      const modalResult = await this.$refs.confirmModal.open({
+        title: 'Удаление тикера',
+        body: `Вы уверены, что хотите удалить тикер ${ticker.name}?`,
+        confirmText: 'Удалить'
+      })
+      if (modalResult) {
+        this.tickers = this.tickers.filter((e) => e != ticker)
+        unsubscribeFromTicker(ticker.name, this.updateTicker)
+        if (ticker == this.selectedTicker) this.selectedTicker = null
+      }
     }
   },
   computed: {
