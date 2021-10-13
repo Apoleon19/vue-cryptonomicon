@@ -89,13 +89,20 @@
             :ticker="ticker"
             :isSelected="ticker == selectedTicker"
             @select-ticker="selectedTicker = $event"
-            @remove-ticker="removeTicker"
+            @remove-ticker="openRemoveModal"
           />
         </dl>
       </template>
       <ticker-graph :graph="graph" :ticker="selectedTicker" @close-graph="selectedTicker = null" />
     </div>
   </div>
+  <crypto-modal :is-open="isOpenModal" @close="isOpenModal = false" @confirm="removeTicker">
+    <template #title>Удаление тикера</template>
+    <template #body
+      >Вы уверены, что хотите удалить тикер <b>{{ tickerToRemove.name }}</b
+      >?</template
+    >
+  </crypto-modal>
 </template>
 <script>
 import { subscribeToTicker, unsubscribeFromTicker } from '@/api.js'
@@ -103,9 +110,10 @@ import AddTicker from './components/AddTicker.vue'
 import TickerCard from './components/TickerCard.vue'
 import TickerGraph from './components/TickerGraph.vue'
 import PageLoader from './components/PageLoader.vue'
+import CryptoModal from './components/CryptoModal.vue'
 
 export default {
-  components: { AddTicker, TickerCard, TickerGraph, PageLoader },
+  components: { AddTicker, TickerCard, TickerGraph, PageLoader, CryptoModal },
   name: 'App',
   data() {
     return {
@@ -118,7 +126,10 @@ export default {
       graph: [],
       maxGraphElements: 1,
 
-      page: 1
+      page: 1,
+
+      isOpenModal: false,
+      tickerToRemove: null
     }
   },
   setup() {
@@ -168,10 +179,15 @@ export default {
       if (this.graph.length < this.maxGraphElements) return
       this.graph = this.graph.splice(this.graph.length - this.maxGraphElements)
     },
-    removeTicker(ticker) {
-      this.tickers = this.tickers.filter((e) => e != ticker)
-      unsubscribeFromTicker(ticker.name, this.updateTicker)
-      if (ticker == this.selectedTicker) this.selectedTicker = null
+    removeTicker() {
+      this.tickers = this.tickers.filter((e) => e != this.tickerToRemove)
+      unsubscribeFromTicker(this.tickerToRemove.name, this.updateTicker)
+      if (this.tickerToRemove == this.selectedTicker) this.selectedTicker = null
+      this.isOpenModal = false
+    },
+    openRemoveModal(ticker) {
+      this.tickerToRemove = ticker
+      this.isOpenModal = true
     }
   },
   computed: {
@@ -190,7 +206,6 @@ export default {
     hasNextPage() {
       return this.filteredTickers.length > this.endIndex
     },
-
     pageStateOptions() {
       return {
         page: this.page,

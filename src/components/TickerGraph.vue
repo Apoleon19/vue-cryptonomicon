@@ -41,7 +41,7 @@ export default {
     ticker: { type: Object, required: false, default: null },
     graph: { type: Array, required: true }
   },
-  emits: ['close-graph'],
+  emits: { 'close-graph': null },
   setup() {
     return { graphElementWidth: 40 }
   },
