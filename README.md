@@ -1,4 +1,5 @@
 # cryptonomicon
+Курс по Vue.js с канала [JavascriptNinja](https://www.youtube.com/c/JavaScript.Ninja)
 
 ## Project setup
 ```
